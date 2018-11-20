@@ -1,0 +1,39 @@
+;===================================================================
+;===================================================================
+;1 CHECK OBSERVING LOG TO MAKE SURE NIGHT IS WORTH REDUCING
+
+IF menu_opt EQ 1 THEN BEGIN
+
+PRINT, '#############################################################'
+PRINT, 'CHECK OBSERVING LOG'
+PRINT, '#############################################################'
+
+;Find astromer's log
+astro_log = FINDFILE(fdir+'doc/AstronomersLog*', COUNT=nlog)
+
+IF nlog EQ 0 THEN BEGIN
+   PRINT, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+   PRINT, 'WARNING!!! NO OBSERVERS LOG FOUND'
+   PRINT, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+ENDIF ELSE BEGIN
+   SPAWN, 'emacs '+astro_log[0]+' &'
+   PRINT, 'Continue with observations from this night? (y/n)'
+
+   qr = ''
+   READ, qr
+   gstatus = -99
+   WHILE gstatus LT 0 DO BEGIN
+      IF STRPOS(STRUPCASE(qr),'Y') GE 0 THEN BEGIN
+         gstatus = 10            
+      ENDIF
+      IF STRPOS(STRUPCASE(qr),'N') GE 0 THEN BEGIN
+         PRINT, 'Go in peace, and may the gods of astronomy grant you what '+$
+                'you have asked of them.'
+         RETURN
+      ENDIF
+      IF gstatus LT 0 THEN BEGIN
+         PRINT, qr+' is an invalid option. Enter option (y/n)'
+         READ, qr
+      ENDIF
+ENDWHILE
+ENDELSE

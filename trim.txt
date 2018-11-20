@@ -1,0 +1,98 @@
+PRO SALT_TRIMFILE, fdir
+
+scmd = STRTRIM(27B,2) + '[22;31m'
+scmdgreen = STRTRIM(27B,2) + '[22;32m'
+scmdblue = STRTRIM(27B,2) + '[22;34m'
+scmd0 = STRTRIM(27B,2) + '[0m'
+
+;Estimate trim regions
+
+;Read in flat field if possible
+IF FILE_TEST(fdir+'FLAT_0.fits') THEN BEGIN
+   ;Open first flat field image to determine area to be trimmed
+   SPAWN, 'ds9 '+fdir+'FLAT_*.fits &'
+   SPAWN, 'ds9 '+fdir+'ARC_*.fits &'
+
+   x = MRDFITS(fdir+'FLAT_0.fits',0)
+   s = SIZE(x) & nx = s[1] & ny = s[2]
+
+   ;Get flat field trace
+   t = FLTARR(ny)
+   FOR i=0, ny-1 DO t[i] = MEDIAN(x[*,i])
+   hmed = 0.5*MEDIAN(t)
+
+   y0 = MAX(WHERE(t LT hmed AND FINDGEN(ny) LE ny/2))
+   y1 = MIN(WHERE(t LT hmed AND FINDGEN(ny) GE ny/2))
+   
+   red = FSC_COLOR('Red',!D.TABLE_SIZE-2)
+   green = FSC_COLOR('Green',!D.TABLE_SIZE-3)
+   PLOT, t, /XSTYLE
+   OPLOT, [0,ny], hmed*[1,1], COLOR=red
+   OPLOT, y0*[1,1], [0,1e6], COLOR=green, LINESTYLE=1
+   OPLOT, y1*[1,1], [0,1e6], COLOR=green, LINESTYLE=1
+   
+   PRINT, 'DEFINE TRIM REGIONS'
+   PRINT
+   PRINT, 'Suggested trim regions:'
+   PRINT, 0, nx-1, y0, y1
+ENDIF ELSE BEGIN
+   PRINT, scmd+'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'+scmd0
+   PRINT, 'WARNING! NO FLAT FIELD DETECTED'
+   PRINT, scmd+'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'+scmd0
+ENDELSE
+
+treg = INTARR(4)
+
+FOR j=0, 3 DO BEGIN
+   regstatus = -99
+   IF j EQ 0 THEN PRINT, 'Enter x0:' 
+   IF j EQ 1 THEN PRINT, 'Enter x1:' 
+   IF j EQ 2 THEN PRINT, 'Enter y0:' 
+   IF j EQ 3 THEN PRINT, 'Enter y1:' 
+   WHILE regstatus LT 0 DO BEGIN
+      qreg = ''
+      READ, qreg
+      IF ISNUMERIC(qreg) THEN BEGIN
+         IF j EQ 0 OR j EQ 2 THEN BEGIN
+            treg[j] = FIX(qreg)
+            regstatus = 10
+         ENDIF
+         IF j EQ 1 OR j EQ 3 THEN BEGIN
+            IF FIX(qreg) GT treg[j-1] THEN BEGIN
+               treg[j] = FIX(qreg)
+               regstatus = 10
+            ENDIF
+         ENDIF
+      ENDIF
+      IF regstatus LT 0 THEN PRINT, 'Invalid option, try again:'
+   ENDWHILE
+ENDFOR
+
+trimsec = '['+STRTRIM(STRING(treg[0],FORMAT='(i4)'),2)+':'+$
+   STRTRIM(STRING(treg[1],FORMAT='(i4)'),2)+','+$
+   STRTRIM(STRING(treg[2],FORMAT='(i4)'),2)+$
+   ':'+STRTRIM(STRING(treg[3],FORMAT='(i4)'),2)+']'
+
+PRINT
+PRINT, '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+PRINT, 'Trim section is '+trimsec
+PRINT, '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+PRINT
+
+;Get file list
+flist = FINDFILE('*_*.fits')
+nfile = N_ELEMENTS(flist)
+
+print, treg
+
+FOR i=0, nfile-1 DO BEGIN
+   x = MRDFITS(STRTRIM(flist[i],2),0,h,/SILENT)
+   x = x[treg[0]:treg[1],treg[2]:treg[3]]
+   SXADDPAR, h, 'TRIM', 'Trim data section is '+trimsec, AFTER='DISPAXIS'
+   SXADDPAR, h, 'CCDSEC', trimsec, AFTER='TRIM'
+   MWRFITS, x, 't'+STRTRIM(flist[i],2), h, /CREATE
+   PRINT, flist[i], 't'+flist[i]
+ENDFOR
+
+
+END
